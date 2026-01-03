@@ -46,7 +46,7 @@ pip install -r requirements.txt
 ```
 
 ## 4. Quick Start
-You can verify the system capabilities by running the demo script:
+You can verify the system capabilities by running the demo script
 ```bash
 python examples/quick_start.py
 ```
@@ -85,7 +85,7 @@ The system is designed with a 3-Tier Architecture to ensure separation of concer
 
 ## 6. Performance Benchmark
 
-Tested on standard environment (Intel i7 / Windows 11):
+Tested on standard environment (Intel i7 / Windows 11)
 
 | Operation | Access Type | Latency (ms) | Note |
 | :--- | :--- | :--- | :--- |
@@ -96,4 +96,5 @@ Tested on standard environment (Intel i7 / Windows 11):
 
 * [ ] Add **File Locking** mechanism for multi-process safety.
 * [ ] Support **S3 Integration** for hybrid (Cloud-Edge) sync.
+
 * [ ] Add CLI support (e.g., `registry list`, `registry push`).
