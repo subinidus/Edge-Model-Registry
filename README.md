@@ -77,6 +77,34 @@ model_obj_cached = registry.load_model("YOLOv8-Nano", "v1.0.0")
 
 The system is designed with a 3-Tier Architecture to ensure separation of concerns.
 
+```mermaid
+flowchart LR
+    subgraph Client ["Client Side (Edge Device)"]
+        User(["Inference Engine"])
+    end
+
+    subgraph System ["Edge-Model-Registry (Middleware)"]
+        API["Interface (core.py)"]
+        Cache[("In-Memory Cache\n(Singleton)")]
+        Logic{"Is Cached?"}
+    end
+
+    subgraph Storage ["Local Storage (Persistence)"]
+        Meta[("Metadata\n(registry.json)")]
+        Artifacts[("Model Files\n(.pt / .onnx)")]
+    end
+
+    %% Flow
+    User -- "1. Load Request" --> API
+    API --> Logic
+    
+    Logic -- "Yes: Warm Start (0.0072ms)" --> Cache
+    Cache -.-> User
+    
+    Logic -- "No: Cold Start (Disk I/O)" --> Meta
+    Meta & Artifacts -- "Load Data" --> Cache
+```
+
 | Layer | Component | Responsibility |
 | :--- | :--- | :--- |
 | **Interface** | `core.py` | API Surface, Validation, Exception Handling |
@@ -98,3 +126,4 @@ Tested on standard environment (Intel i7 / Windows 11)
 * [ ] Support **S3 Integration** for hybrid (Cloud-Edge) sync.
 
 * [ ] Add CLI support (e.g., `registry list`, `registry push`).
+
