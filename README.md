@@ -77,7 +77,7 @@ model_obj_cached = registry.load_model("YOLOv8-Nano", "v1.0.0")
 
 The system is designed with a 3-Tier Architecture to ensure separation of concerns.
 
-(./assets/pipeline_diagram.png)
+![Architecture Pipeline](./assets/pipeline.png)
 
 | Layer | Component | Responsibility |
 | :--- | :--- | :--- |
@@ -100,6 +100,7 @@ Tested on standard environment (Intel i7 / Windows 11)
 * [ ] Support **S3 Integration** for hybrid (Cloud-Edge) sync.
 
 * [ ] Add CLI support (e.g., `registry list`, `registry push`).
+
 
 
 
