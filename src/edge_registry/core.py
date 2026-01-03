@@ -1,136 +1,167 @@
 import os
 import json
 import shutil
-from typing import List, Dict, Optional, Union, Any
-from datetime import datetime
+import time
+from typing import Dict, Any, Optional
 
 class ModelRegistry:
     """
-    A file-system based lightweight model registry for edge environments.
+    A lightweight, file-system-based model registry designed for edge environments.
     
-    This class handles the lifecycle of ML models including registration,
-    versioning, storage isolation, metadata persistence, and in-memory caching.
+    This class implements the Singleton pattern to ensure a shared in-memory cache 
+    across the application lifecycle. It manages model artifacts and metadata 
+    persistence without external database dependencies.
+
+    Attributes:
+        base_dir (str): Root directory for storing registry data and artifacts.
+        _in_memory_cache (Dict): Singleton cache storage for loaded model objects.
     """
+    
+    _instance = None
+    
+    def __new__(cls, *args, **kwargs):
+        """
+        Ensure strictly one instance per process (Singleton Pattern).
+        If an instance already exists, return it; otherwise, create a new one.
+        """
+        if not cls._instance:
+            cls._instance = super(ModelRegistry, cls).__new__(cls)
+        return cls._instance
 
     def __init__(self, base_dir: str = "./data"):
         """
-        Initialize the ModelRegistry system.
-
+        Initialize the registry.
+        
         Args:
-            base_dir (str): The root directory where models and metadata will be stored.
-                            Defaults to "./data".
+            base_dir (str): Path to the storage directory. Defaults to "./data".
         """
+        # Prevent re-initialization if the instance already exists
+        if hasattr(self, "_initialized") and self._initialized:
+            return
+            
         self.base_dir = base_dir
         self.models_dir = os.path.join(base_dir, "models")
         self.registry_path = os.path.join(base_dir, "registry.json")
         
-        # [Optimization] In-memory cache to prevent redundant disk I/O and memory usage
-        # Key: "{name}_{version}", Value: Loaded Model Object
+        # Initialize singleton cache state
         self._in_memory_cache: Dict[str, Any] = {}
         
-        # Ensure the storage directory exists
+        # Ensure storage structure exists
         os.makedirs(self.models_dir, exist_ok=True)
         
-        # Initialize persistence layer
-        self.registry = self._load_registry()
+        if not os.path.exists(self.registry_path):
+            self._save_registry({})
+            
+        # Mark as initialized to prevent overwriting state on subsequent calls
+        self._initialized = True
 
     def _load_registry(self) -> Dict:
-        """
-        Load metadata from the JSON registry file.
-        """
-        if os.path.exists(self.registry_path):
-            try:
-                with open(self.registry_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except json.JSONDecodeError:
-                print(f"[Warning] Registry file at {self.registry_path} is corrupted. Initializing new registry.")
-                return {"models": []}
-        return {"models": []}
+        """Internal method to load metadata from the JSON persistence layer."""
+        try:
+            with open(self.registry_path, "r") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            # Fallback to empty registry in case of corruption or missing file
+            return {}
 
-    def _save_registry(self):
+    def _save_registry(self, data: Dict) -> None:
         """
-        Persist current metadata to the JSON registry file.
+        Save metadata to JSON file using an atomic write pattern.
+        
+        This prevents data corruption if the process crashes during a write operation.
         """
-        with open(self.registry_path, 'w', encoding='utf-8') as f:
-            json.dump(self.registry, f, indent=4, ensure_ascii=False)
+        temp_path = self.registry_path + ".tmp"
+        with open(temp_path, "w") as f:
+            json.dump(data, f, indent=4)
+        
+        # Atomic replacement
+        shutil.move(temp_path, self.registry_path)
 
     def register_model(self, name: str, version: str, model_path: str, 
-                       metrics: Dict[str, float], metadata: Dict[str, str] = None) -> Dict:
+                      metrics: Dict = None, metadata: Dict = None) -> Dict:
         """
-        Register a new model version and isolate the artifact.
+        Register a new model artifact into the system.
+
+        Args:
+            name (str): The unique name of the model family (e.g., 'YOLOv8').
+            version (str): Semantic version string (e.g., 'v1.0.0').
+            model_path (str): Local path to the source model file (.pt, .onnx).
+            metrics (Dict, optional): Performance metrics (accuracy, latency).
+            metadata (Dict, optional): Additional info (author, framework).
+
+        Returns:
+            Dict: The registered model metadata.
         """
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Source model artifact not found: {model_path}")
+        if metrics is None: metrics = {}
+        if metadata is None: metadata = {}
 
-        if self.get_model_path(name, version):
-            raise ValueError(f"Model '{name}' version '{version}' already exists in registry.")
-
-        target_dir = os.path.join(self.models_dir, name, version)
-        os.makedirs(target_dir, exist_ok=True)
+        # 1. Prepare destination directory for artifact isolation
+        model_dir = os.path.join(self.models_dir, name, version)
+        os.makedirs(model_dir, exist_ok=True)
         
         filename = os.path.basename(model_path)
-        target_path = os.path.join(target_dir, filename)
+        dest_path = os.path.join(model_dir, filename)
         
-        shutil.copy2(model_path, target_path)
-
+        # 2. Copy artifact (Simulating storage upload)
+        shutil.copy2(model_path, dest_path)
+        
+        # 3. Update persistent metadata
+        registry_data = self._load_registry()
+        
+        if name not in registry_data:
+            registry_data[name] = {}
+            
         model_info = {
             "name": name,
             "version": version,
-            "path": os.path.abspath(target_path), 
+            "path": os.path.abspath(dest_path),
             "metrics": metrics,
-            "metadata": metadata or {},
-            "registered_at": datetime.now().isoformat()
+            "metadata": metadata,
+            "registered_at": time.time()
         }
         
-        self.registry["models"].append(model_info)
-        self._save_registry()
+        registry_data[name][version] = model_info
+        self._save_registry(registry_data)
         
         return model_info
 
     def get_model_path(self, name: str, version: str) -> Optional[str]:
-        """Retrieve the absolute file path for a specific model version."""
-        for model in self.registry["models"]:
-            if model["name"] == name and model["version"] == version:
-                return model["path"]
-        return None
+        """Retrieve the absolute file path of a registered model."""
+        data = self._load_registry()
+        return data.get(name, {}).get(version, {}).get("path")
 
     def load_model(self, name: str, version: str) -> Any:
         """
-        Load a model into memory with Caching (Singleton-like pattern).
+        Load a model object with an optimized caching strategy.
 
-        If the model is already in the cache, return the cached instance.
-        Otherwise, load it from disk, cache it, and return it.
-
-        Args:
-            name (str): The model name.
-            version (str): The target version.
+        Strategy:
+            1. Check In-Memory Cache (Warm Start).
+            2. If missing, load from Disk (Cold Start).
+            3. Update Cache for future access.
 
         Returns:
-            Any: The loaded model object (e.g., PyTorch Module).
+            Any: The loaded model object (binary content for demo).
         
         Raises:
             ValueError: If the model is not found in the registry.
         """
-        # 1. Check Cache (Hit)
+        # Generate unique cache key
         cache_key = f"{name}_{version}"
+        
+        # 1. Warm Start: Return directly from singleton cache
         if cache_key in self._in_memory_cache:
-            # print(f"[System] Serving '{cache_key}' from In-Memory Cache.") # For debugging
             return self._in_memory_cache[cache_key]
-
-        # 2. Check Disk (Miss)
+            
+        # 2. Cold Start: Validate path and load from disk
         path = self.get_model_path(name, version)
-        if not path:
-            raise ValueError(f"Model '{name}' version '{version}' not found in registry.")
-
-        # 3. Simulate Heavy Loading (In real usage: model = torch.load(path))
-        # Here we assume it's a generic object or simulate loading for the portfolio demo.
-        print(f"[System] Loading '{cache_key}' from Disk... (Simulated Heavy I/O)")
+        if not path or not os.path.exists(path):
+            raise ValueError(f"Model artifact not found: {name} version {version}")
+            
+        # Simulating heavy model loading (e.g., torch.load)
+        with open(path, "r") as f:
+            model_obj = f.read() 
+            
+        # 3. Update Cache (Lazy Loading)
+        self._in_memory_cache[cache_key] = model_obj
         
-        # [PORTFOLIO NOTE]: Replace this logic with actual `torch.load(path)` if needed.
-        # For now, we wrap the path in a dummy class to simulate an object.
-        loaded_instance = f"Loaded Model Object ({name} {version}) from {path}"
-        
-        # 4. Update Cache
-        self._in_memory_cache[cache_key] = loaded_instance
-        
-        return loaded_instance
+        return model_obj
