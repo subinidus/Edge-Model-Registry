@@ -13,7 +13,7 @@ In typical MLOps pipelines, model registries rely on heavy infrastructure like S
 * **Limited Resources:** Heavy DB processes consume vital RAM/CPU needed for inference.
 * **Data Persistence:** Metadata must survive system reboots without external dependencies.
 
-**Edge-Model-Registry** solves these problems by providing a file-system-based registry with **ACID-like persistence** and **memory optimization**.
+**Edge-Model-Registry** solves these problems by providing a file-system-based registry with **Atomic Persistence** and **Singleton-based Memory Optimization**.
 
 ---
 
@@ -24,15 +24,14 @@ In typical MLOps pipelines, model registries rely on heavy infrastructure like S
 * Ensures metadata retention across system reboots.
 * **Why JSON?** For edge setups handling <1,000 models, file I/O overhead is negligible compared to the maintenance cost of a DB server.
 
-### 🔹 2. Artifact Isolation & Versioning
-* Enforces **Semantic Versioning** (e.g., `v1.0.0`, `v1.2.0`).
-* Physically isolates model binaries in structured directories to prevent file conflicts.
-* Directory Structure: `data/models/{model_name}/{version}/artifact.pt`
+### 🔹 2. Data Integrity (Atomic Writes)
+* Implements **Atomic Write Pattern** (write-temp-and-move) to prevent data corruption.
+* Guarantees `registry.json` integrity even if the system crashes during a save operation.
 
-### 🔹 3. Memory Optimization (Singleton Pattern)
-* Implements **Lazy Loading** with In-Memory Caching.
-* Reduces redundant disk I/O and prevents memory bloat during high-frequency inference requests.
-* **Benchmark:** Achieved **~17x speedup** in warm-start loading (0.12ms → 0.006ms).
+### 🔹 3. Strict Singleton & Caching
+* Implements **Strict Singleton Pattern** using `__new__` to ensure a single source of truth for cache state.
+* **Lazy Loading Strategy:** Reduces redundant disk I/O by caching model binaries in memory after the first access.
+* **Benchmark:** Achieved **~75x speedup** in warm-start loading.
 
 ---
 
@@ -90,8 +89,8 @@ Tested on standard environment (Intel i7 / Windows 11):
 
 | Operation | Access Type | Latency (ms) | Note |
 | :--- | :--- | :--- | :--- |
-| **Cold Start** | Disk I/O | 0.1216 ms | First time access |
-| **Warm Start** | Memory Cache | **0.0069 ms** | **17.6x Faster** |
+| **Cold Start** | Disk I/O | 0.5414 ms | OS File Read overhead |
+| **Warm Start** | Memory Cache | **0.0072 ms** | **75.7x Faster** |
 
 ## 7. Future Work (Roadmap)
 
