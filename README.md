@@ -77,6 +77,7 @@ model_obj_cached = registry.load_model("YOLOv8-Nano", "v1.0.0")
 
 The system is designed with a 3-Tier Architecture to ensure separation of concerns.
 
+```mermaid
 flowchart LR
     classDef bw fill:#ffffff,stroke:#333333,stroke-width:1px,color:#000000;
     
@@ -127,5 +128,6 @@ Tested on standard environment (Intel i7 / Windows 11)
 * [ ] Support **S3 Integration** for hybrid (Cloud-Edge) sync.
 
 * [ ] Add CLI support (e.g., `registry list`, `registry push`).
+
 
 
